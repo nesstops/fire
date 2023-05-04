@@ -1,0 +1,42 @@
+ prepare_release:
+    <<: *defaults 
+    environment: &buildenv
+        GOMODCACHE: /root/project/gomodcache
+    steps:
+      - &remote-docker
+        setup_remote_docker: 
+          version: 20.10.14
+      - checkout: 
+          path: hugo
+      - &git-config
+        run:
+           command: |
+            git config --global user.email "bjorn.erik.pedersen+hugoreleaser@gmail.com"
+            git config --global user.name "hugoreleaser"
+      - run:
+          command: |
+            cd hugo
+            go mod download
+            go run -tags release main.go release --step 1
+      - save_cache:
+          key: git-sha-{{ .Revision }}
+          paths:
+            - hugo
+            - gomodcache
+  build_container1:
+    <<: [*defaults]
+    environment:
+      <<: [*buildenv]
+    steps:
+      - &restore-cache
+        restore_cache:
+          key: git-sha-{{ .Revision }}
+      - run:
+          no_output_timeout: 20m
+          command: |
+            mkdir -p /tmp/files/dist1
+            cd hugo
+            hugoreleaser build -paths "builds/container1/**" -workers 3 -dist /tmp/files/dist1 -chunks $CIRCLE_NODE_TOTAL -chunk-index $CIRCLE_NODE_INDEX
+      - &persist-workspace
+        persist_to_workspace:
+          root: /tmp/files
